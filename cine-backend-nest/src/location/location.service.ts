@@ -62,7 +62,7 @@ export class LocationService {
       name,
       countryId,
       isActive,
-      country,
+      country: country ? new Country({ id: country.id, name: country.name, cities: [] }) : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -246,7 +246,7 @@ export class LocationService {
 
       // Asociar al nuevo país
       city.countryId = newCountry.id;
-      city.country = newCountry;
+      city.country = new Country({ id: newCountry.id, name: newCountry.name, cities: [] });
       newCountry.cities.push(city);
     }
 

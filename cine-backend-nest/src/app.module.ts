@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
-import { LocationModule } from './location/location/location.module.js';
+import { LocationModule } from './location/location.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 

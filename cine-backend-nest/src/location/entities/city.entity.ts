@@ -12,9 +12,6 @@ export class City {
   constructor(partial?: Partial<City>) {
     if (partial) {
       Object.assign(this, partial);
-      if (partial.country) {
-        this.country = new Country(partial.country);
-      }
     }
   }
 }

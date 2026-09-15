@@ -11,7 +11,7 @@ export class Country {
     if (partial) {
       Object.assign(this, partial);
       if (partial.cities) {
-        this.cities = partial.cities.map((city) => new City(city));
+        this.cities = partial.cities;
       }
     }
   }
