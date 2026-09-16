@@ -28,4 +28,4 @@ import { EmailController } from './email.controller.js';
   controllers: [EmailController],
   exports: [EmailService],
 })
-export class MailModule {}
+export class EmailModule {}
