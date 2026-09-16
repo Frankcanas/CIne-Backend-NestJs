@@ -3,6 +3,7 @@ import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { LocationModule } from './location/location.module.js';
+import { EmailModule } from './email/email.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -16,6 +17,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
       serviceId: 'cine-backend-nest',
     }),
     LocationModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService],
