@@ -1,0 +1,50 @@
+services:
+  app:
+    build:
+      context: .
+      target: production
+    container_name: ${APP_CONTAINER_NAME:-cine-backend-nest}-prod
+    restart: always
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - POSTGRES_HOST=db
+      - DATABASE_URL=postgres://${POSTGRES_USER:-nodejs}:${POSTGRES_PASSWORD:-123456}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-postgres}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cine-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: ${DB_CONTAINER_NAME:-cine-postgres-db}-prod
+    restart: always
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-nodejs}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-123456}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nodejs} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cine-network
+
+volumes:
+  postgres_prod_data:
+    name: cine_postgres_prod_data
+
+networks:
+  cine-network:
+    name: cine_backend_prod_network
+    driver: bridge

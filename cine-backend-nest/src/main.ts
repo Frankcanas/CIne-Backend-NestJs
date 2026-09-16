@@ -28,7 +28,9 @@ async function bootstrap() {
     .setTitle('Cine Backend API')
     .setDescription('API de Cine Backend migrada a NestJS')
     .setVersion('1.0')
+    .addBearerAuth()
     .addTag('Locations', 'Endpoints para consultar países y ciudades')
+    .addTag('Users', 'Endpoints para gestión de usuarios, perfiles y membresías')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
