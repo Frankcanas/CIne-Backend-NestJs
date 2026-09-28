@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import crypto from 'crypto';
 import { User } from './entities/user.entity.js';
@@ -10,6 +11,7 @@ import { VerifiedUser } from './entities/verified-user.entity.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UserProfileDto } from './dto/user-profile.dto.js';
+import { CreateMembershipDto } from './dto/create-membership.dto.js';
 import { hashPassword, validatePassword } from './utils/password.util.js';
 
 @Injectable()
@@ -184,6 +186,15 @@ export class UserService {
   }
 
   /**
+   * Obtiene un usuario por su token de recuperación de contraseña.
+   */
+  async findByResetToken(token: string): Promise<User | null> {
+    return (
+      this.users.find((u) => u.resetPasswordToken === token.trim()) ?? null
+    );
+  }
+
+  /**
    * Obtiene el perfil completo del usuario con el cálculo dinámico de su membresía.
    */
   async getProfile(userId: number): Promise<UserProfileDto> {
@@ -274,7 +285,7 @@ export class UserService {
       (v) => v.userId === userId,
     );
     if (isAlreadyVerified) {
-      throw new BadRequestException('El usuario ya está verificado.');
+      throw new ConflictException('El usuario ya está verificado.');
     }
 
     const token = crypto.randomInt(100000, 999999).toString();
@@ -351,4 +362,52 @@ export class UserService {
 
     return { message: `Usuario con ID ${id} eliminado correctamente` };
   }
+
+  // ==========================================
+  // Métodos de Membresías (HU y compatibilidad Express)
+  // ==========================================
+
+  /**
+   * Obtiene todas las membresías registradas.
+   * Migrado de Express: GET /api/membership
+   */
+  async getAllMemberships(): Promise<Membership[]> {
+    return [...this.memberships];
+  }
+
+  /**
+   * Crea una nueva membresía.
+   * Migrado de Express: POST /api/membership/create
+   */
+  async createMembership(dto: CreateMembershipDto): Promise<Membership> {
+    const membership = new Membership({
+      id: this.membershipIdCounter++,
+      name: dto.name.trim(),
+      price: dto.price,
+      durationDays: dto.durationDays,
+      description: dto.description.trim(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    this.memberships.push(membership);
+    return membership;
+  }
+
+  /**
+   * Obtiene el catálogo de beneficios y descuentos por membresía.
+   * Migrado de Express: GET /api/membership/benefits
+   */
+  async getBenefitsCatalog(): Promise<any[]> {
+    return this.memberships.map((m) => ({
+      id: m.id,
+      name: m.name,
+      level: m.level || 'Básica',
+      discountPercentage: m.name.toLowerCase().includes('premium') ? 20 : 5,
+      pointsMultiplier: m.name.toLowerCase().includes('premium') ? 20 : 10,
+      benefits: m.description,
+      validityDays: m.durationDays,
+    }));
+  }
 }
+

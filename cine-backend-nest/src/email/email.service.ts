@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Subject } from 'rxjs';
 import { MailerService } from '@nestjs-modules/mailer';
 
 @Injectable()
@@ -7,6 +6,15 @@ export class EmailService {
     constructor (
         private readonly emailService: MailerService
     ) {}
+
+    async send(options: { to: string; subject: string; html: string }): Promise<void> {
+      await this.emailService.sendMail({
+        from: `"Riwi-Cine" <${process.env.SMTP_USER}>`,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+      });
+    }
 
     async sendVerificationEmail(to: string, token: string): Promise<void> {
     await this.emailService.sendMail({
