@@ -63,6 +63,14 @@ async function bootstrap() {
       'Marketing',
       'Endpoints para campañas de correo y promociones de membresías',
     )
+    .addTag(
+      'Movies - TMDB',
+      'Endpoints para consultar catálogo externo, estrenos, populares y búsqueda en The Movie Database (TMDB)',
+    )
+    .addTag(
+      'Movies',
+      'Endpoints para gestión del catálogo de películas locales, recomendaciones y cartelera',
+    )
     .addTag('Health', 'Verificación del estado de salud de la API')
     .build();
 
