@@ -39,4 +39,11 @@ export class AppController {
       uptime: process.uptime(),
     };
   }
+  @Get('health')
+healthCheck() {
+  return {
+    status: 'ok',
+  };
 }
+}
+

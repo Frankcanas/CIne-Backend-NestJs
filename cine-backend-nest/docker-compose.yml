@@ -17,7 +17,7 @@ services:
       - NODE_ENV=${NODE_ENV:-development}
       - PORT=3000
       - POSTGRES_HOST=db
-      - DATABASE_URL=postgres://${POSTGRES_USER:-nodejs}:${POSTGRES_PASSWORD:-123456}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-postgres}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-nodejs}:${POSTGRES_PASSWORD:-123456}@db:5432/${POSTGRES_DB:-postgres}
     depends_on:
       db:
         condition: service_healthy
@@ -43,12 +43,39 @@ services:
       retries: 5
     networks:
       - cine-network
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: cine-sonarqube
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - cine-network
 
 volumes:
   postgres_data:
     name: cine_postgres_data
 
+  sonarqube_data:
+    name: cine_sonarqube_data
+
+  sonarqube_extensions:
+    name: cine_sonarqube_extensions
+
+  sonarqube_logs:
+    name: cine_sonarqube_logs
+
 networks:
   cine-network:
     name: cine_backend_network
     driver: bridge
+
+
+
+

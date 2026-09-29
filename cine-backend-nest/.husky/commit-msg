@@ -1,0 +1,13 @@
+#!/bin/sh
+
+COMMIT_MSG=$(cat "$1")
+PATTERN='^\[US-[0-9]+\] (feat|fix|test|refactor|docs|chore): .+'
+
+if ! printf '%s\n' "$COMMIT_MSG" | grep -Eq "$PATTERN"; then
+  echo "❌ Formato de commit inválido."
+  echo "Formato requerido: [US-XXX] tipo: descripción"
+  echo "Tipos permitidos: feat, fix, test, refactor, docs, chore"
+  exit 1
+fi
+
+echo "✅ Mensaje de commit válido."

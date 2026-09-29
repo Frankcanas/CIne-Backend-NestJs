@@ -12,17 +12,27 @@ import { MovieModule } from './movie/movie.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
+const observeEnabled =
+  Boolean(process.env.OBSERVE_APP_KEY) &&
+  Boolean(process.env.OBSERVE_APP_SECRET);
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', '.env.example'],
     }),
-    ObserveModule.forRoot({
-      appKey: process.env.OBSERVE_APP_KEY || 'YOUR_APP_KEY',
-      appSecret: process.env.OBSERVE_APP_SECRET || 'YOUR_APP_SECRET',
-      serviceId: 'cine-backend-nest',
-    }),
+
+    ...(observeEnabled
+      ? [
+          ObserveModule.forRoot({
+            appKey: process.env.OBSERVE_APP_KEY!,
+            appSecret: process.env.OBSERVE_APP_SECRET!,
+            serviceId: 'cine-backend-nest',
+          }),
+        ]
+      : []),
+
     LocationModule,
     UserModule,
     AuthModule,
