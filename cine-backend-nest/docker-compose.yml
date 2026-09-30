@@ -58,6 +58,18 @@ services:
     networks:
       - cine-network
 
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: cine-jenkins
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+    networks:
+      - cine-network    
+
 volumes:
   postgres_data:
     name: cine_postgres_data
@@ -70,6 +82,9 @@ volumes:
 
   sonarqube_logs:
     name: cine_sonarqube_logs
+    
+  jenkins_home:
+    name: cine_jenkins_home
 
 networks:
   cine-network:
