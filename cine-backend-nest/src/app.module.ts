@@ -6,7 +6,6 @@ import { AppService } from './app.service.js';
 import { LocationModule } from './location/location.module.js';
 import { UserModule } from './user/user.module.js';
 import { AuthModule } from './auth/auth.module.js';
-import { AuthenticationModule } from './authentication/authentication.module.js';
 import { EmailModule } from './email/email.module.js';
 import { MovieModule } from './movie/movie.module.js';
 
@@ -36,7 +35,6 @@ const observeEnabled =
     LocationModule,
     UserModule,
     AuthModule,
-    AuthenticationModule,
     EmailModule,
     MovieModule,
   ],
