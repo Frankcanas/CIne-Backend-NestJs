@@ -202,7 +202,17 @@ SonarQube runs as a container and is configured for the project through `sonar-p
 
 The coverage report is generated with `npm run test:cov`.
 
-The Quality Gate thresholds (minimum coverage, critical bugs and vulnerabilities, duplication, and code smells) will be defined and justified on Day 3.
+The `Jenkinsfile` runs `npm ci`, lint, tests with coverage, the production build, SonarScanner, and then waits for the SonarQube Quality Gate. A failed lint, test, build, or gate fails the pipeline. Configure the gate policy in SonarQube; the scanner does not create gate thresholds.
+
+### Jenkins setup for the pipeline
+
+Install these Jenkins plugins: **Pipeline**, **NodeJS**, **SonarQube Scanner**, and **Pipeline: Stage View**. In **Manage Jenkins → Tools**, define a NodeJS installation named `NodeJS 20` (Node 20.x) and a SonarQube Scanner installation named `SonarScanner`.
+
+In **Manage Jenkins → System → SonarQube installations**, add a server named `SonarQube` with URL `http://sonarqube:9000` and select a Jenkins Secret Text credential containing a SonarQube user token. The Jenkins service and SonarQube service already share the Compose network, so use the service hostname, not `localhost`.
+
+Create a SonarQube webhook pointing to `http://jenkins:8080/sonarqube-webhook/`. Jenkins' `waitForQualityGate` step depends on this webhook. In SonarQube, create or select a Quality Gate and assign it to project `cine-backend-nest`; its thresholds are managed in SonarQube.
+
+Create a **Pipeline** job configured to use **Pipeline script from SCM**, select the repository and branch, and set the script path to `Jenkinsfile`. Configure a GitHub webhook or SCM polling separately if automatic triggers are needed. Do not put tokens in the Jenkinsfile or repository.
 
 ## 10. Basic Security Measures
 
@@ -224,7 +234,7 @@ Points to keep in mind:
 | Multi-stage Dockerfile and production compose | Done |
 | Husky: `pre-commit` and `commit-msg` | Done |
 | `GET /health` endpoint | Done |
-| Jenkins configuration (plugins, credentials, webhook) | Pending (Day 4) |
-| SonarQube Quality Gate | Pending (Day 3) |
-| `Jenkinsfile` and CI/CD pipeline | Pending (Days 4 and 5) |
+| Jenkins configuration (plugins, tools, credentials, webhook) | Requires Jenkins UI configuration |
+| SonarQube Quality Gate | Requires SonarQube UI configuration |
+| `Jenkinsfile` and CI validation pipeline | Implemented; requires Jenkins tool/server setup |
 | Automatic deployment and health check in the pipeline | Pending (Day 5) |
