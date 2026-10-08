@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    tools { nodejs 'node-22' }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 20, unit: 'MINUTES')
+    }
+
+    environment {
+        CI    = 'true'
+        HUSKY = '0'   // evita que "prepare" intente instalar los hooks en Jenkins
+    }
+
+    triggers { pollSCM('H/2 * * * *') }
+
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+        stage('Install') {
+            steps { dir('cine-backend-nest') { sh 'npm ci' } }
+        }
+        stage('Lint') {
+            steps { dir('cine-backend-nest') { sh 'npm run lint' } }
+        }
+        stage('Test') {
+            steps { dir('cine-backend-nest') { sh 'npm test' } }
+        }
+        stage('Coverage') {
+            steps { dir('cine-backend-nest') { sh 'npm run test:cov' } }
+        }
+        stage('SonarQube') {
+            steps {
+                dir('cine-backend-nest') {
+                    script {
+                        def scannerHome = tool 'SonarScanner'
+                        withSonarQubeEnv('sonarqube') {
+                            sh "${scannerHome}/bin/sonar-scanner"
+                        }
+                    }
+                }
+            }
+        }
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+    }
+
+    post {
+        success { echo 'Pipeline OK' }
+        failure { echo 'Pipeline falló, revisa la etapa en rojo' }
+    }
+}
