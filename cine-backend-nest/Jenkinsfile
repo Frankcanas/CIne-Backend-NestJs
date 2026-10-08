@@ -5,29 +5,44 @@ pipeline {
     nodejs 'NodeJS 20'
   }
 
+  environment {
+    CI = 'true'
+    HUSKY = '0'
+  }
+
   options {
     timestamps()
     disableConcurrentBuilds()
     timeout(time: 20, unit: 'MINUTES')
   }
 
+  triggers {
+    pollSCM('H/2 * * * *')
+  }
+
   stages {
     stage('Install') {
       steps {
-        sh 'npm ci'
+        dir('cine-backend-nest') {
+          sh 'npm ci'
+        }
       }
     }
 
     stage('Lint and test') {
       steps {
-        sh 'npm run lint'
-        sh 'npm run test:cov'
+        dir('cine-backend-nest') {
+          sh 'npm run lint'
+          sh 'npm run test:cov'
+        }
       }
     }
 
     stage('Build') {
       steps {
-        sh 'npm run build'
+        dir('cine-backend-nest') {
+          sh 'npm run build'
+        }
       }
     }
 
@@ -36,7 +51,9 @@ pipeline {
         script {
           def scannerHome = tool 'SonarScanner'
           withSonarQubeEnv('SonarQube') {
-            sh "${scannerHome}/bin/sonar-scanner"
+            dir('cine-backend-nest') {
+              sh "${scannerHome}/bin/sonar-scanner"
+            }
           }
         }
       }
@@ -48,6 +65,15 @@ pipeline {
           waitForQualityGate abortPipeline: true
         }
       }
+    }
+  }
+
+  post {
+    success {
+      echo 'Pipeline OK'
+    }
+    failure {
+      echo 'Pipeline failed; inspect the failed stage.'
     }
   }
 }

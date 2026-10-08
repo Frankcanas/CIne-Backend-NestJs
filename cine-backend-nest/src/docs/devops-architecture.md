@@ -212,7 +212,7 @@ In **Manage Jenkins → System → SonarQube installations**, add a server named
 
 Create a SonarQube webhook pointing to `http://jenkins:8080/sonarqube-webhook/`. Jenkins' `waitForQualityGate` step depends on this webhook. In SonarQube, create or select a Quality Gate and assign it to project `cine-backend-nest`; its thresholds are managed in SonarQube.
 
-Create a **Pipeline** job configured to use **Pipeline script from SCM**, select the repository and branch, and set the script path to `Jenkinsfile`. Configure a GitHub webhook or SCM polling separately if automatic triggers are needed. Do not put tokens in the Jenkinsfile or repository.
+Create a **Pipeline** job configured to use **Pipeline script from SCM**, select the repository and branch, and set the script path to `cine-backend-nest/Jenkinsfile`. The pipeline polls SCM every two minutes. Do not put tokens in the Jenkinsfile or repository.
 
 ## 10. Basic Security Measures
 
