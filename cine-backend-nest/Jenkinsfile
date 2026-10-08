@@ -67,7 +67,59 @@ pipeline {
       }
     }
   }
+stage('Deploy') {
+    steps {
+        dir('cine-backend-nest') {
+            withCredentials([
+                file(credentialsId: 'cine-backend-env', variable: 'ENV_FILE')
+            ]) {
+                sh '''
+                    set -eu
 
+                    echo "Construyendo imagen de producción..."
+
+                    tar \
+                      --exclude=node_modules \
+                      --exclude=dist \
+                      --exclude=coverage \
+                      --exclude=.git \
+                      --exclude=.env \
+                      -cf - . | docker build \
+                        --target production \
+                        -t cine-backend-nest-app:ci \
+                        -f Dockerfile -
+
+                    echo "Preparando despliegue..."
+
+                    docker compose \
+                      --env-file "$ENV_FILE" \
+                      -f docker-compose.yml \
+                      -f docker-compose.deploy.yml \
+                      config --quiet
+                '''
+            }
+        }
+    }
+}
+
+stage('Health Check') {
+    steps {
+        sh '''
+            echo "Verificando aplicación NestJS..."
+
+            node -e "
+              const http = require('http');
+              http.get('http://riwi-cine-backend:3000/api/health', res => {
+                console.log('HTTP status:', res.statusCode);
+                process.exit(res.statusCode === 200 ? 0 : 1);
+              }).on('error', err => {
+                console.error(err.message);
+                process.exit(1);
+              });
+            "
+        '''
+    }
+}
   post {
     success {
       echo 'Pipeline OK'

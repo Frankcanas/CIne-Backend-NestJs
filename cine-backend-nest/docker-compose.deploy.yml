@@ -1,0 +1,7 @@
+services:
+  app:
+    image: cine-backend-nest-app:ci
+    build: !reset null
+    environment:
+      NODE_ENV: production
+    volumes: !reset []
