@@ -8,6 +8,7 @@ import { UserModule } from './user/user.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { EmailModule } from './email/email.module.js';
 import { MovieModule } from './movie/movie.module.js';
+import { ProductModule } from './product/product.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -37,6 +38,7 @@ const observeEnabled =
     AuthModule,
     EmailModule,
     MovieModule,
+    ProductModule,
   ],
   controllers: [AppController],
   providers: [AppService],
