@@ -9,7 +9,8 @@ async function bootstrap() {
   });
 
   // Prefijo global /api replicando las rutas de Express
-  app.setGlobalPrefix('api');
+  // /health queda fuera del prefijo para que Jenkins lo consulte en GET /health
+  app.setGlobalPrefix('api', { exclude: ['health'] });
 
   // CORS habilitado para comunicación con Frontend y Swagger
   app.enableCors();
@@ -70,6 +71,10 @@ async function bootstrap() {
     .addTag(
       'Movies',
       'Endpoints para gestión del catálogo de películas locales, recomendaciones y cartelera',
+    )
+    .addTag(
+      'Products',
+      'Endpoints para consultar el catálogo de productos de confitería',
     )
     .addTag('Health', 'Verificación del estado de salud de la API')
     .build();

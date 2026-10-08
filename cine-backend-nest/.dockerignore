@@ -13,3 +13,5 @@ yarn-error.log*
 coverage
 *.md
 .DS_Store
+.env
+.scannerwork

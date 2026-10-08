@@ -1,3 +1,6 @@
+// Pipeline CI/CD - cine-backend-nest
+// Checkout -> Install -> Lint -> Test -> Coverage -> SonarQube -> Quality Gate
+//          -> Build -> Deploy (solo rama principal) -> Health Check
 pipeline {
   agent any
 
@@ -8,12 +11,16 @@ pipeline {
   environment {
     CI = 'true'
     HUSKY = '0'
+    // Rama desplegable. Deploy y Health Check solo corren cuando se construye esta rama.
+    DEPLOY_BRANCH = 'main'
+    IMAGE_NAME = 'cine-backend-nest-app:ci'
+    COMPOSE_PROJECT = 'cine-backend-nest'
   }
 
   options {
     timestamps()
     disableConcurrentBuilds()
-    timeout(time: 20, unit: 'MINUTES')
+    timeout(time: 30, unit: 'MINUTES')
   }
 
   triggers {
@@ -21,6 +28,12 @@ pipeline {
   }
 
   stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
     stage('Install') {
       steps {
         dir('cine-backend-nest') {
@@ -29,24 +42,32 @@ pipeline {
       }
     }
 
-    stage('Lint and test') {
+    stage('Lint') {
       steps {
         dir('cine-backend-nest') {
           sh 'npm run lint'
+        }
+      }
+    }
+
+    stage('Test') {
+      steps {
+        dir('cine-backend-nest') {
+          sh 'npm test'
+        }
+      }
+    }
+
+    stage('Coverage') {
+      // Falla si no se cumplen los umbrales definidos en vitest.config.ts
+      steps {
+        dir('cine-backend-nest') {
           sh 'npm run test:cov'
         }
       }
     }
 
-    stage('Build') {
-      steps {
-        dir('cine-backend-nest') {
-          sh 'npm run build'
-        }
-      }
-    }
-
-    stage('SonarQube analysis') {
+    stage('SonarQube') {
       steps {
         script {
           def scannerHome = tool 'SonarScanner'
@@ -60,72 +81,150 @@ pipeline {
     }
 
     stage('Quality Gate') {
+      // Consulta la API de SonarQube (no requiere webhook):
+      //   1) /api/ce/task                      -> espera a que termine el analisis
+      //   2) /api/qualitygates/project_status  -> lee el resultado del gate
       steps {
-        timeout(time: 5, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
+        withSonarQubeEnv('SonarQube') {
+          dir('cine-backend-nest') {
+            timeout(time: 10, unit: 'MINUTES') {
+              sh '''
+                set -eu
+                REPORT=.scannerwork/report-task.txt
+                CE_TASK_URL=$(sed -n 's/^ceTaskUrl=//p' "$REPORT" | tr -d '\r')
+
+                json() {
+                  node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);console.log($1)})"
+                }
+
+                echo "Esperando el analisis de SonarQube..."
+                ANALYSIS_ID=""
+                for i in $(seq 1 60); do
+                  TASK=$(curl -fsS -u "$SONAR_AUTH_TOKEN:" "$CE_TASK_URL")
+                  STATUS=$(printf '%s' "$TASK" | json 'j.task.status')
+                  case "$STATUS" in
+                    SUCCESS)
+                      ANALYSIS_ID=$(printf '%s' "$TASK" | json 'j.task.analysisId')
+                      break ;;
+                    FAILED|CANCELED)
+                      echo "El analisis de SonarQube termino en estado $STATUS"
+                      exit 1 ;;
+                  esac
+                  sleep 5
+                done
+
+                if [ -z "$ANALYSIS_ID" ]; then
+                  echo "Timeout esperando el analisis de SonarQube"
+                  exit 1
+                fi
+
+                GATE=$(curl -fsS -u "$SONAR_AUTH_TOKEN:" \
+                  "$SONAR_HOST_URL/api/qualitygates/project_status?analysisId=$ANALYSIS_ID")
+                GATE_STATUS=$(printf '%s' "$GATE" | json 'j.projectStatus.status')
+
+                echo "Condiciones del Quality Gate:"
+                printf '%s' "$GATE" | json "j.projectStatus.conditions.map(c => '  - ' + c.metricKey + ': ' + c.status + ' (actual=' + c.actualValue + ', umbral=' + c.errorThreshold + ')').join('\\\\n')"
+                echo "Quality Gate: $GATE_STATUS"
+
+                if [ "$GATE_STATUS" != "OK" ]; then
+                  echo "Quality Gate NO superado. Se detiene el pipeline."
+                  exit 1
+                fi
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    stage('Build') {
+      steps {
+        dir('cine-backend-nest') {
+          sh 'npm run build'
+          // Imagen de produccion que usara el Deploy
+          sh 'docker build --target production -t "$IMAGE_NAME" .'
+        }
+      }
+    }
+
+    stage('Deploy') {
+      when {
+        expression {
+          def branch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''
+          return branch == env.DEPLOY_BRANCH || branch == "origin/${env.DEPLOY_BRANCH}"
+        }
+      }
+      steps {
+        dir('cine-backend-nest') {
+          // El .env de produccion vive en Jenkins Credentials (Secret file), nunca en Git.
+          withCredentials([file(credentialsId: 'cine-backend-env', variable: 'ENV_FILE')]) {
+            sh '''
+              set -eu
+              trap 'rm -f .env' EXIT
+              cp "$ENV_FILE" .env
+
+              echo "Desplegando $IMAGE_NAME..."
+              COMPOSE="docker compose -p $COMPOSE_PROJECT -f docker-compose.yml -f docker-compose.deploy.yml"
+
+              # La base de datos solo se crea si no existe; la app siempre se recrea.
+              $COMPOSE up -d db
+              $COMPOSE up -d --no-deps --force-recreate app
+              $COMPOSE ps
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Health Check') {
+      when {
+        expression {
+          def branch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''
+          return branch == env.DEPLOY_BRANCH || branch == "origin/${env.DEPLOY_BRANCH}"
+        }
+      }
+      steps {
+        dir('cine-backend-nest') {
+          withCredentials([file(credentialsId: 'cine-backend-env', variable: 'ENV_FILE')]) {
+            sh '''
+              set -eu
+              APP_HOST=$(sed -n 's/^APP_CONTAINER_NAME=//p' "$ENV_FILE" | tail -n 1 | tr -d '\r"')
+              APP_HOST=${APP_HOST:-cine-backend-nest}
+              URL="http://$APP_HOST:3000/health"
+
+              echo "Verificando $URL ..."
+              for i in $(seq 1 30); do
+                BODY=$(curl -fsS --max-time 5 "$URL" 2>/dev/null || true)
+                if printf '%s' "$BODY" | grep -q '"status":"ok"'; then
+                  echo "Health check OK: $BODY"
+                  echo "Deployment OK"
+                  exit 0
+                fi
+                echo "Intento $i/30: la aplicacion aun no responde..."
+                sleep 3
+              done
+
+              echo "Deployment failed: /health no respondio status ok"
+              docker logs --tail 50 "$APP_HOST" || true
+              exit 1
+            '''
+          }
         }
       }
     }
   }
-stage('Deploy') {
-    steps {
-        dir('cine-backend-nest') {
-            withCredentials([
-                file(credentialsId: 'cine-backend-env', variable: 'ENV_FILE')
-            ]) {
-                sh '''
-                    set -eu
 
-                    echo "Construyendo imagen de producción..."
-
-                    tar \
-                      --exclude=node_modules \
-                      --exclude=dist \
-                      --exclude=coverage \
-                      --exclude=.git \
-                      --exclude=.env \
-                      -cf - . | docker build \
-                        --target production \
-                        -t cine-backend-nest-app:ci \
-                        -f Dockerfile -
-
-                    echo "Preparando despliegue..."
-
-                    docker compose \
-                      --env-file "$ENV_FILE" \
-                      -f docker-compose.yml \
-                      -f docker-compose.deploy.yml \
-                      config --quiet
-                '''
-            }
-        }
-    }
-}
-
-stage('Health Check') {
-    steps {
-        sh '''
-            echo "Verificando aplicación NestJS..."
-
-            node -e "
-              const http = require('http');
-              http.get('http://riwi-cine-backend:3000/api/health', res => {
-                console.log('HTTP status:', res.statusCode);
-                process.exit(res.statusCode === 200 ? 0 : 1);
-              }).on('error', err => {
-                console.error(err.message);
-                process.exit(1);
-              });
-            "
-        '''
-    }
-}
   post {
     success {
       echo 'Pipeline OK'
     }
     failure {
       echo 'Pipeline failed; inspect the failed stage.'
+    }
+    always {
+      dir('cine-backend-nest') {
+        sh 'rm -f .env'
+      }
     }
   }
 }

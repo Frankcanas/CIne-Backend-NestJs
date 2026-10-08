@@ -202,7 +202,7 @@ SonarQube runs as a container and is configured for the project through `sonar-p
 
 The coverage report is generated with `npm run test:cov`.
 
-The `Jenkinsfile` runs `npm ci`, lint, tests with coverage, the production build, SonarScanner, and then waits for the SonarQube Quality Gate. A failed lint, test, build, or gate fails the pipeline. Configure the gate policy in SonarQube; the scanner does not create gate thresholds.
+The `Jenkinsfile` runs checkout, `npm ci`, lint, tests, coverage (with thresholds in `vitest.config.ts`), SonarScanner, and then queries the SonarQube API (`/api/ce/task` and `/api/qualitygates/project_status`) to read the Quality Gate result. Only afterwards does it build, deploy and run the health check. A failed lint, test, coverage threshold, or gate fails the pipeline. Configure the gate policy in SonarQube; the scanner does not create gate thresholds. See `README-cambios.md` for the recommended thresholds.
 
 ### Jenkins setup for the pipeline
 
@@ -210,7 +210,7 @@ Install these Jenkins plugins: **Pipeline**, **NodeJS**, **SonarQube Scanner**, 
 
 In **Manage Jenkins → System → SonarQube installations**, add a server named `SonarQube` with URL `http://sonarqube:9000` and select a Jenkins Secret Text credential containing a SonarQube user token. The Jenkins service and SonarQube service already share the Compose network, so use the service hostname, not `localhost`.
 
-Create a SonarQube webhook pointing to `http://jenkins:8080/sonarqube-webhook/`. Jenkins' `waitForQualityGate` step depends on this webhook. In SonarQube, create or select a Quality Gate and assign it to project `cine-backend-nest`; its thresholds are managed in SonarQube.
+The Quality Gate stage uses the SonarQube API with the token of the `SonarQube` installation, so no webhook is required. In SonarQube, create or select a Quality Gate and assign it to project `cine-backend-nest`; its thresholds are managed in SonarQube.
 
 Create a **Pipeline** job configured to use **Pipeline script from SCM**, select the repository and branch, and set the script path to `cine-backend-nest/Jenkinsfile`. The pipeline polls SCM every two minutes. Do not put tokens in the Jenkinsfile or repository.
 
@@ -233,8 +233,9 @@ Points to keep in mind:
 | App, database, SonarQube, and Jenkins containers defined in Compose | Done |
 | Multi-stage Dockerfile and production compose | Done |
 | Husky: `pre-commit` and `commit-msg` | Done |
-| `GET /health` endpoint | Done |
+| `GET /health` endpoint (`{"status":"ok"}`) | Done |
+| US-200 `GET /api/products` endpoint | Done |
 | Jenkins configuration (plugins, tools, credentials, webhook) | Requires Jenkins UI configuration |
 | SonarQube Quality Gate | Requires SonarQube UI configuration |
 | `Jenkinsfile` and CI validation pipeline | Implemented; requires Jenkins tool/server setup |
-| Automatic deployment and health check in the pipeline | Pending (Day 5) |
+| Automatic deployment (Docker Compose on the Jenkins host) and health check in the pipeline | Implemented; requires the `cine-backend-env` credential in Jenkins |

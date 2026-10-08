@@ -14,8 +14,8 @@ export class AppController {
   }
 
   /**
-   * Verificar el estado de salud de la API.
-   * Migrado de Express: GET /api/v1/health y GET /api/health
+   * Verificar el estado de salud de la API (usado por Jenkins tras el deploy).
+   * GET /health y GET /api/v1/health
    */
   @Get(['health', 'v1/health'])
   @ApiTags('Health')
@@ -26,24 +26,11 @@ export class AppController {
     schema: {
       type: 'object',
       properties: {
-        status: { type: 'string', example: 'OK' },
-        timestamp: { type: 'string', format: 'date-time' },
-        uptime: { type: 'number', example: 123.45 },
+        status: { type: 'string', example: 'ok' },
       },
     },
   })
-  getHealth() {
-    return {
-      status: 'OK',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    };
+  healthCheck() {
+    return { status: 'ok' };
   }
-  @Get('health')
-healthCheck() {
-  return {
-    status: 'ok',
-  };
 }
-}
-
