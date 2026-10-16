@@ -1,15 +1,30 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
 import { Movie } from '../entities/movie.entity.js';
+import { Showtime } from '../entities/showtime.entity.js';
 import { CreateMovieDto } from '../dto/create-movie.dto.js';
 import { UpdateMovieDto } from '../dto/update-movie.dto.js';
 import { MovieFilterDto } from '../dto/movie-filter.dto.js';
+import { BillboardFilterDto } from '../dto/billboard-filter.dto.js';
 import { TmdbService } from './tmdb.service.js';
 import { MappedMovie } from '../mappers/tmdb-movie.mapper.js';
+import { MovieRepository } from '../repositories/movie.repository.js';
+import {
+  BillboardPeriod,
+  BillboardResponse,
+} from '../types/billboard.types.js';
+
+export type MovieDetail = Movie & {
+  availableFormats: string[];
+  availableLanguages: string[];
+};
+
+export type ShowtimeWithSoldOut = Showtime & { soldOut: boolean };
 
 @Injectable()
 export class MovieService implements OnModuleInit {
@@ -18,7 +33,10 @@ export class MovieService implements OnModuleInit {
   private genres: { id: number; name: string }[] = [];
   private movieIdCounter = 1;
 
-  constructor(private readonly tmdbService: TmdbService) {}
+  constructor(
+    private readonly tmdbService: TmdbService,
+    private readonly movieRepository: MovieRepository,
+  ) {}
 
   async onModuleInit() {
     // Carga inicial suave de películas populares de TMDB para que el equipo tenga datos listos
@@ -117,12 +135,16 @@ export class MovieService implements OnModuleInit {
     return result;
   }
 
-  async findById(id: number): Promise<Movie> {
-    const movie = this.movies.find((m) => m.id === id);
-    if (!movie) {
-      throw new NotFoundException(`Película con ID ${id} no encontrada`);
-    }
-    return movie;
+  // HU-004: detalle persistido en PostgreSQL.
+  async findById(id: number): Promise<MovieDetail> {
+    const movie = await this.findPersistedMovie(id);
+    const functions = await this.movieRepository.findFunctionsByMovieId(id);
+
+    return {
+      ...movie,
+      availableFormats: this.uniqueValues(functions.map((f) => f.format)),
+      availableLanguages: this.uniqueValues(functions.map((f) => f.language)),
+    };
   }
 
   async findByTmdbId(tmdbId: number): Promise<Movie | null> {
@@ -142,7 +164,7 @@ export class MovieService implements OnModuleInit {
   }
 
   async updateMovie(id: number, dto: UpdateMovieDto): Promise<Movie> {
-    const movie = await this.findById(id);
+    const movie = this.findInMemoryById(id);
     Object.assign(movie, dto, { updatedAt: new Date() });
     return movie;
   }
@@ -168,10 +190,154 @@ export class MovieService implements OnModuleInit {
   }
 
   async getMovieRecommendations(id: number): Promise<MappedMovie[]> {
-    const movie = await this.findById(id);
+    const movie = await this.findPersistedMovie(id);
     if (movie.tmdbId) {
       return this.tmdbService.getMovieRecommendations(movie.tmdbId);
     }
     return [];
+  }
+
+  // HU-004: funciones futuras; las agotadas se marcan, no se ocultan.
+  async getMovieFunctions(
+    movieId: number,
+    city?: string,
+  ): Promise<ShowtimeWithSoldOut[]> {
+    await this.findPersistedMovie(movieId);
+    const functions = await this.movieRepository.findFunctionsByMovieId(
+      movieId,
+      city,
+    );
+
+    return functions.map((showtime) => this.withSoldOut(showtime));
+  }
+
+  private async findPersistedMovie(id: number): Promise<Movie> {
+    const movie = await this.movieRepository.findById(id);
+    if (!movie) {
+      throw new NotFoundException(`Película con ID ${id} no encontrada`);
+    }
+    return movie;
+  }
+
+  // Temporal: updateMovie sigue usando el almacenamiento en memoria.
+  private findInMemoryById(id: number): Movie {
+    const movie = this.movies.find((m) => m.id === id);
+    if (!movie) {
+      throw new NotFoundException(`Película con ID ${id} no encontrada`);
+    }
+    return movie;
+  }
+
+  private withSoldOut(showtime: Showtime): ShowtimeWithSoldOut {
+    const hasSeatInformation =
+      showtime.availableSeats !== null && showtime.availableSeats !== undefined;
+
+    return {
+      ...showtime,
+      soldOut: hasSeatInformation && Number(showtime.availableSeats) <= 0,
+    };
+  }
+
+  private uniqueValues(values: (string | null | undefined)[]): string[] {
+    return Array.from(
+      new Set<string>(values.flatMap((value) => (value ? [value] : []))),
+    );
+  }
+
+  // ===== Cartelera (HU-003): PostgreSQL vía MovieRepository =====
+
+  async getWeeklyBillboard(
+    filter: BillboardFilterDto = {},
+  ): Promise<BillboardResponse> {
+    const from = new Date();
+    const to = new Date(from);
+    to.setDate(to.getDate() + 7);
+
+    return this.buildBillboard('weekly', from, to, filter);
+  }
+
+  async getTodayBillboard(
+    filter: BillboardFilterDto = {},
+  ): Promise<BillboardResponse> {
+    const from = new Date();
+    const to = new Date(from);
+    to.setHours(24, 0, 0, 0);
+
+    return this.buildBillboard('today', from, to, filter);
+  }
+
+  async getFilteredBillboard(
+    filter: BillboardFilterDto,
+  ): Promise<BillboardResponse> {
+    if (!filter.date) {
+      const from = new Date();
+      const to = new Date(from);
+      to.setDate(to.getDate() + 7);
+
+      return this.buildBillboard('filtered', from, to, filter);
+    }
+
+    const { from, to } = this.createDateRange(filter.date);
+
+    return this.buildBillboard('filtered', from, to, filter);
+  }
+
+  private async buildBillboard(
+    period: BillboardPeriod,
+    from: Date,
+    to: Date,
+    filter: BillboardFilterDto,
+  ): Promise<BillboardResponse> {
+    const movies = await this.movieRepository.findBillboard(from, to, filter);
+
+    const formattedMovies = movies.map((movie) => {
+      const showtimes = (movie.showtimes ?? []).map((showtime) =>
+        this.withSoldOut(showtime),
+      );
+
+      return {
+        ...movie,
+        showtimes,
+        availableFormats: this.uniqueValues(showtimes.map((s) => s.format)),
+        availableLanguages: this.uniqueValues(showtimes.map((s) => s.language)),
+      };
+    });
+
+    return {
+      period,
+      from: from.toISOString(),
+      to: to.toISOString(),
+      totalMovies: formattedMovies.length,
+      message:
+        formattedMovies.length === 0
+          ? 'No existen funciones activas ni películas en cartelera para los filtros seleccionados.'
+          : undefined,
+      movies: formattedMovies,
+    };
+  }
+
+  private createDateRange(date: string): { from: Date; to: Date } {
+    const parts = date.split('-').map(Number);
+
+    if (parts.length !== 3) {
+      throw new BadRequestException('La fecha debe tener formato YYYY-MM-DD');
+    }
+
+    const [year, month, day] = parts;
+    const from = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+    const isValidDate =
+      from.getFullYear() === year &&
+      from.getMonth() === month - 1 &&
+      from.getDate() === day;
+
+    if (!isValidDate) {
+      throw new BadRequestException('La fecha proporcionada no es válida');
+    }
+
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+
+    return { from, to };
   }
 }

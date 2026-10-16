@@ -24,6 +24,8 @@ import { TmdbQueryDto, TmdbSearchQueryDto } from './dto/tmdb-query.dto.js';
 import { CreateMovieDto } from './dto/create-movie.dto.js';
 import { UpdateMovieDto } from './dto/update-movie.dto.js';
 import { MovieFilterDto } from './dto/movie-filter.dto.js';
+import { BillboardFilterDto } from './dto/billboard-filter.dto.js';
+import { MovieFunctionsQueryDto } from './dto/movie-functions-query.dto.js';
 import { Movie } from './entities/movie.entity.js';
 
 @Controller(['movies', 'movie'])
@@ -191,6 +193,48 @@ export class MovieController {
   }
 
   // ==========================================
+  // Endpoints de Cartelera (Billboard)
+  // Rutas estáticas: deben declararse antes de ':id'
+  // ==========================================
+
+  @Get('weekly')
+  @ApiTags('Billboard')
+  @ApiOperation({ summary: 'Obtener cartelera semanal' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cartelera de los próximos 7 días',
+  })
+  async getWeeklyBillboard(@Query() filter: BillboardFilterDto) {
+    return this.movieService.getWeeklyBillboard(filter);
+  }
+
+  @Get('today')
+  @ApiTags('Billboard')
+  @ApiOperation({ summary: 'Obtener cartelera del día' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cartelera desde ahora hasta la medianoche',
+  })
+  async getTodayBillboard(@Query() filter: BillboardFilterDto) {
+    return this.movieService.getTodayBillboard(filter);
+  }
+
+  @Get('filter')
+  @ApiTags('Billboard')
+  @ApiOperation({ summary: 'Filtrar cartelera' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cartelera filtrada',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Filtros o fecha inválidos',
+  })
+  async getFilteredBillboard(@Query() filter: BillboardFilterDto) {
+    return this.movieService.getFilteredBillboard(filter);
+  }
+
+  // ==========================================
   // Endpoints del Catálogo Local de Películas (Movies)
   // ==========================================
 
@@ -206,6 +250,22 @@ export class MovieController {
   })
   async getMovies(@Query() filter: MovieFilterDto) {
     return this.movieService.getMovies(filter);
+  }
+
+  @Get(':id/functions')
+  @ApiTags('Movies')
+  @ApiOperation({ summary: 'Obtener funciones futuras de una película' })
+  @ApiParam({ name: 'id', type: Number, description: 'ID de la película local' })
+  @ApiResponse({
+    status: 200,
+    description: 'Funciones futuras disponibles, con indicador soldOut',
+  })
+  @ApiResponse({ status: 404, description: 'Película no encontrada' })
+  async getMovieFunctions(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: MovieFunctionsQueryDto,
+  ) {
+    return this.movieService.getMovieFunctions(id, query.city);
   }
 
   @Get(':id')
